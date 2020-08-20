@@ -1,0 +1,11 @@
+version: '3.6'
+services:
+  mqttio:
+    build: 
+      context: .
+    privileged: true
+    restart: unless-stopped
+    volumes:
+      - ./config.yml:/config.yml
+      - /etc/revpi/config.rsc:/config.rsc
+

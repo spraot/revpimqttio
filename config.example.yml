@@ -1,0 +1,11 @@
+topic_prefix: pi/io
+mqtt_server_ip: localhost
+mqtt_server_port: 1883
+mqtt_server_user: mqtt
+mqtt_server_password: 123abc
+
+switches:
+  - id: office_lights
+    name: Office
+    output_id: O_1_1
+    md-icon: ceiling-light
