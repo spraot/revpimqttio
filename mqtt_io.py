@@ -108,7 +108,7 @@ class MqttLightControl():
             "command_topic": switch["mqtt_command_topic"],
             "state_topic": switch["mqtt_state_topic"],
             "availability_topic": switch["mqtt_availability_topic"],
-            "retain": True,
+            "retain": False,
             "device": {"identifiers": switch["id"]}
         }
 
@@ -117,9 +117,10 @@ class MqttLightControl():
 
         try:
             switch_configuration['name'] = switch["name"]
-            switch_configuration['device']['name'] = switch["name"]
         except KeyError:
-            pass
+            switch_configuration['name'] = switch["id"]
+
+        switch_configuration['device']['name'] = switch_configuration["name"]
 
         try:
             switch_configuration['unique_id'] = switch["unique_id"]
