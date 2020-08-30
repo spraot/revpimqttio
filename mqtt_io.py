@@ -34,6 +34,7 @@ class MqttLightControl():
 
     default_switch = {
         'name': 'Switch',
+        'type': 'switch',
         'md-icon': 'ceiling-light'
     }
 
@@ -91,7 +92,12 @@ class MqttLightControl():
             if not 'output_id' in switch:
                 switch['unique_id'] = switch["id"]
 
-            switch["mqtt_config_topic"] = "{}/switch/{}/config".format(self.homeassistant_prefix, switch["id"])
+            if switch['type'] == 'pwm':
+                component = 'sensor'
+            else:
+                component = switch['type']
+
+            switch["mqtt_config_topic"] = "{}/{}/{}/config".format(self.homeassistant_prefix, component, switch["id"])
             switch["mqtt_command_topic"] = "{}/{}/set".format(self.topic_prefix, switch["id"])
             switch["mqtt_state_topic"] = "{}/{}/state".format(self.topic_prefix, switch["id"])
             switch["mqtt_availability_topic"] = "{}/{}/availability".format(self.topic_prefix, switch["id"])
@@ -105,6 +111,9 @@ class MqttLightControl():
             "retain": True,
             "device": {"identifiers": switch["id"]}
         }
+
+        if switch['type'] == 'pwm':
+            switch_configuration['unit_of_measurement'] = '%'
 
         try:
             switch_configuration['name'] = switch["name"]
@@ -202,16 +211,25 @@ class MqttLightControl():
         switch = self.switch_mqtt_command_topic_map[str(msg.topic)]
         logging.debug("Found switch matching MQTT message: " + switch["name"])
 
-        if payload_as_string.upper() == "ON":
+        if switch['type'] == 'pwm':
+            try:
+                self.set_switch_state(switch, float(payload_as_string))
+            except ValueError:
+                logging.error("Setting output state to " + payload_as_string + " not supported for pwm type")
+        else:
+            payload_as_string = payload_as_string.upper()
+            if payload_as_string == "ON":
             self.set_switch_state(switch, True)
-        elif payload_as_string.upper() == "OFF":
-            logging.debug("Setting state " + payload_as_string)
+            elif payload_as_string == "OFF":
             self.set_switch_state(switch, False)
         else:
-            logging.warn("Setting output state to " + payload_as_string + " not supported")
+                logging.error("Setting output state to " + payload_as_string + " not supported for switch type")
 
     def set_switch_state(self, switch, state):
         logging.debug("Setting output " + switch["output_id"] + " to " + str(state))
+        if switch['type'] == 'pwm':
+            self.rpi.io[switch["output_id"]].value = state
+        else:
         self.rpi.io[switch["output_id"]].value = 1 if state else 0
 
         try:
