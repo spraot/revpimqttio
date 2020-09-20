@@ -29,8 +29,7 @@ class MqttLightControl():
     mqtt_server_port = 1883
     mqtt_server_user = ""
     mqtt_server_password = ""
-    switch_mqtt_command_topic_map = {}
-    switch_input_id_map = {}
+    switch_mqtt_topic_map = {}
 
     default_switch = {
         'name': 'Switch',
@@ -51,7 +50,8 @@ class MqttLightControl():
 
         #Construct map for fast indexing
         for switch in self.switches:
-            self.switch_mqtt_command_topic_map[switch["mqtt_command_topic"]] = switch
+            self.switch_mqtt_topic_map[switch["mqtt_command_topic"]] = switch
+            self.switch_mqtt_topic_map[switch["mqtt_state_topic"]] = switch
 
         #RPI init
         self.rpi = revpimodio2.RevPiModIO(autorefresh=True, direct_output=True, configrsc='/config.rsc')
@@ -167,7 +167,7 @@ class MqttLightControl():
         a1_state = False
         rpi.core.A1 = revpimodio2.OFF
 
-        while getattr(thread, "service_runing", True):
+        while getattr(thread, "service_running", True):
             if a1_state:
                 rpi.core.A1 = revpimodio2.OFF
             else:
@@ -206,13 +206,17 @@ class MqttLightControl():
         #Subsribe to MQTT switch updates
         for switch in self.switches:
             self.mqttclient.subscribe(switch["mqtt_command_topic"])
+            self.mqttclient.subscribe(switch["mqtt_state_topic"])
 
     def mqtt_on_message(self, client, userdata, msg):
         payload_as_string = msg.payload.decode('utf-8')
         logging.info("Received MQTT message on topic: " + msg.topic + ", payload: " + payload_as_string + ", retained: " + str(msg.retain))
 
-        switch = self.switch_mqtt_command_topic_map[str(msg.topic)]
+        switch = self.switch_mqtt_topic_map[str(msg.topic)]
         logging.debug("Found switch matching MQTT message: " + switch["name"])
+
+        if msg.topic == switch['mqtt_state_topic'] and not msg.retain:
+            return
 
         if switch['type'] == 'pwm':
             try:
@@ -225,10 +229,10 @@ class MqttLightControl():
         else:
             payload_as_string = payload_as_string.upper()
             if payload_as_string == "ON":
-            self.set_switch_state(switch, True)
+                self.set_switch_state(switch, True)
             elif payload_as_string == "OFF":
-            self.set_switch_state(switch, False)
-        else:
+                self.set_switch_state(switch, False)
+            else:
                 logging.error("Setting output state to " + payload_as_string + " not supported for switch type")
 
     def set_switch_state(self, switch, state):
@@ -236,7 +240,7 @@ class MqttLightControl():
         if switch['type'] == 'pwm':
             self.rpi.io[switch["output_id"]].value = round(state*2.55)
         else:
-        self.rpi.io[switch["output_id"]].value = 1 if state else 0
+            self.rpi.io[switch["output_id"]].value = 1 if state else 0
 
         try:
             self.mqtt_broadcast_state(switch, state)           
