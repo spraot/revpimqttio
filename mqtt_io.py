@@ -57,6 +57,8 @@ class MqttLightControl():
         self.rpi = revpimodio2.RevPiModIO(autorefresh=True, direct_output=True, configrsc='/config.rsc')
         self.rpi.handlesignalend(self.programend)
 
+        # TODO: Check whether PWM is enabled if type=pwm (see https://revpimodio.org/en/version-2-5-3-2/)
+
         #MQTT init
         self.mqttclient = mqtt.Client()
         self.mqttclient.on_connect = self.mqtt_on_connect
@@ -214,9 +216,12 @@ class MqttLightControl():
 
         if switch['type'] == 'pwm':
             try:
-                self.set_switch_state(switch, float(payload_as_string))
+                state = float(payload_as_string)
+                if state < 0 or state > 100:
+                    throw ValueError()
+                self.set_switch_state(switch, state)
             except ValueError:
-                logging.error("Setting output state to " + payload_as_string + " not supported for pwm type")
+                logging.error("Setting output state to " + payload_as_string + " not supported for pwm type, must be percent: 0 <= x <= 100")
         else:
             payload_as_string = payload_as_string.upper()
             if payload_as_string == "ON":
@@ -229,7 +234,7 @@ class MqttLightControl():
     def set_switch_state(self, switch, state):
         logging.debug("Setting output " + switch["output_id"] + " to " + str(state))
         if switch['type'] == 'pwm':
-            self.rpi.io[switch["output_id"]].value = state
+            self.rpi.io[switch["output_id"]].value = round(state*2.55)
         else:
         self.rpi.io[switch["output_id"]].value = 1 if state else 0
 
