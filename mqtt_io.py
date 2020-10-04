@@ -222,7 +222,7 @@ class MqttLightControl():
             try:
                 state = float(payload_as_string)
                 if state < 0 or state > 100:
-                    throw ValueError()
+                    raise ValueError('pwm command must be percent value between 0 and 100')
                 self.set_switch_state(switch, state)
             except ValueError:
                 logging.error("Setting output state to " + payload_as_string + " not supported for pwm type, must be percent: 0 <= x <= 100")
