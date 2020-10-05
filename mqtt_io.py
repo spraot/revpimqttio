@@ -184,6 +184,7 @@ class MqttLightControl():
             pass
 
         for switch in self.switches:
+            self.set_switch_state(switch, 0)
             self.mqtt_broadcast_switch_availability(switch, "offline")
 
         self.rpi.core.A1 = revpimodio2.OFF
@@ -229,14 +230,17 @@ class MqttLightControl():
                 if state < 0 or state > 100:
                     raise ValueError('pwm command must be percent value between 0 and 100')
                 self.set_switch_state(switch, state)
+                self.mqtt_broadcast_state(switch, payload_as_string)
             except ValueError:
                 logging.error("Setting output state to " + payload_as_string + " not supported for pwm type, must be percent: 0 <= x <= 100")
         else:
             payload_as_string = payload_as_string.upper()
             if payload_as_string == "ON":
                 self.set_switch_state(switch, True)
+                self.mqtt_broadcast_state(switch, payload_as_string)
             elif payload_as_string == "OFF":
                 self.set_switch_state(switch, False)
+                self.mqtt_broadcast_state(switch, payload_as_string)
             else:
                 logging.error("Setting output state to " + payload_as_string + " not supported for switch type")
 
@@ -245,12 +249,7 @@ class MqttLightControl():
         if switch['type'] == 'pwm':
             self.rpi.io[switch["output_id"]].value = round(state*2.55)
         else:
-            self.rpi.io[switch["output_id"]].value = 1 if state else 0
-
-        try:
-            self.mqtt_broadcast_state(switch, state)           
-        except Exception:
-            logging.error("Cannot set switch state" + traceback.format_exc())     
+            self.rpi.io[switch["output_id"]].value = 1 if state else 0  
 
 
     def mqtt_broadcast_switch_availability(self, switch, value):
@@ -258,12 +257,8 @@ class MqttLightControl():
        self.mqttclient.publish(switch["mqtt_availability_topic"], payload=value, qos=0, retain=True)
 
     def mqtt_broadcast_state(self, switch, state):
-        if state:
-            mqtt_payload = "ON"
-        else:
-            mqtt_payload = "OFF"
-        logging.debug("Broadcasting MQTT message on topic: " + switch["mqtt_state_topic"] + ", value: " + mqtt_payload)
-        self.mqttclient.publish(switch["mqtt_state_topic"], payload=mqtt_payload, qos=0, retain=True)
+        logging.debug("Broadcasting MQTT message on topic: " + switch["mqtt_state_topic"] + ", value: " + state)
+        self.mqttclient.publish(switch["mqtt_state_topic"], payload=state, qos=0, retain=True)
 
 if __name__ == "__main__":
     mqttLightControl =  MqttLightControl()
