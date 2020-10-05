@@ -219,38 +219,33 @@ class MqttLightControl():
         if msg.topic == switch['mqtt_state_topic'] and not msg.retain:
             return
 
-        if switch['type'] == 'pwm':
+        if payload_as_string.upper() == "ON":
+            state = True
+        elif payload_as_string.upper() == "OFF":
+            state = False
+        elif switch['type'] == 'pwm':
             try:
-                if payload_as_string.upper() == "ON":
-                    state = 100
-                elif payload_as_string.upper() == "OFF":
-                    state = 0
-                else:
-                    state = float(payload_as_string)
+                state = float(payload_as_string)
                 if state < 0 or state > 100:
                     raise ValueError('pwm command must be percent value between 0 and 100')
-                self.set_switch_state(switch, state)
-                self.mqtt_broadcast_state(switch, payload_as_string)
             except ValueError:
                 logging.error("Setting output state to " + payload_as_string + " not supported for pwm type, must be percent: 0 <= x <= 100")
         else:
-            payload_as_string = payload_as_string.upper()
-            if payload_as_string == "ON":
-                self.set_switch_state(switch, True)
-                self.mqtt_broadcast_state(switch, payload_as_string)
-            elif payload_as_string == "OFF":
-                self.set_switch_state(switch, False)
-                self.mqtt_broadcast_state(switch, payload_as_string)
-            else:
-                logging.error("Setting output state to " + payload_as_string + " not supported for switch type")
+            logging.error("Setting output state to " + payload_as_string + " not supported for switch type")
+        
+        self.set_switch_state(switch, state)
+        self.mqtt_broadcast_state(switch, payload_as_string)
 
     def set_switch_state(self, switch, state):
         logging.debug("Setting output " + switch["output_id"] + " to " + str(state))
         if switch['type'] == 'pwm':
+            if state == True:
+                state = 100
+            if state == False:
+                state = 0
             self.rpi.io[switch["output_id"]].value = round(state*2.55)
         else:
             self.rpi.io[switch["output_id"]].value = 1 if state else 0  
-
 
     def mqtt_broadcast_switch_availability(self, switch, value):
        logging.debug("Broadcasting MQTT message on topic: " + switch["mqtt_availability_topic"] + ", value: " + value)
