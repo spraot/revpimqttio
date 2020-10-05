@@ -5,6 +5,7 @@ services:
       context: .
     privileged: true
     restart: unless-stopped
+    network_mode: host
     volumes:
       - ./config.yml:/config.yml
       - /etc/revpi/config.rsc:/config.rsc
