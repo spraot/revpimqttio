@@ -1,4 +1,3 @@
 paho-mqtt==1.5.0
-psutil==5.7.2
 PyYAML==5.3.1
 revpimodio2==2.5.1
