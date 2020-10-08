@@ -91,8 +91,8 @@ class MqttLightControl():
                 if not k in switch:
                     switch[k] = v
 
-            if not 'output_id' in switch:
-                switch['unique_id'] = switch["id"]
+            if not 'unique_id' in switch:
+                switch['unique_id'] = switch["id"].replace('/', '_')
 
             if switch['type'] == 'pwm':
                 component = 'sensor'
@@ -111,7 +111,7 @@ class MqttLightControl():
             "state_topic": switch["mqtt_state_topic"],
             "availability_topic": switch["mqtt_availability_topic"],
             "retain": False,
-            "device": {"identifiers": switch["id"]}
+            "device": {"identifiers": switch["unique_id"]}
         }
 
         if switch['type'] == 'pwm':
@@ -120,14 +120,11 @@ class MqttLightControl():
         try:
             switch_configuration['name'] = switch["name"]
         except KeyError:
-            switch_configuration['name'] = switch["id"]
+            switch_configuration['name'] = switch["unique_id"]
 
         switch_configuration['device']['name'] = switch_configuration["name"]
 
-        try:
-            switch_configuration['unique_id'] = switch["unique_id"]
-        except KeyError:
-            switch_configuration['unique_id'] = switch["id"]
+        switch_configuration['unique_id'] = switch["unique_id"]
 
         try:
             switch_configuration['icon'] = "mdi:" + switch["md-icon"]
