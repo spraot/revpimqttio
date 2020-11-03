@@ -125,16 +125,13 @@ class MqttLightControl():
                 "identifiers": [switch["unique_id"]],
                 "manufacturer": "KUNBUS GmbH",
                 "model": "RevPi Digital IO",
+                "name": "RevPi "+switch['type']
                 "sw_version": "mqttio"
                 }
         }
 
         if switch['type'] == 'pwm':
             switch_configuration['unit_of_measurement'] = '%'
-
-        if switch['type'] == 'light':
-            switch_configuration['brightness'] = False
-            switch_configuration['color_temp'] = False
 
         try:
             switch_configuration['name'] = switch["name"]
@@ -145,10 +142,10 @@ class MqttLightControl():
 
         switch_configuration['unique_id'] = switch["unique_id"]
 
-        try:
-            switch_configuration['icon'] = "mdi:" + switch["md-icon"]
-        except KeyError:
-            pass
+        # try:
+        #     switch_configuration['icon'] = "mdi:" + switch["md-icon"]
+        # except KeyError:
+        #     pass
 
         json_conf = json.dumps(switch_configuration)
         logging.debug("Broadcasting homeassistant configuration for switch: " + switch["name"] + ":" + json_conf)
@@ -238,8 +235,10 @@ class MqttLightControl():
             return
 
         if payload_as_string.upper() == "ON":
+            payload_as_string = 'on'
             state = True
         elif payload_as_string.upper() == "OFF":
+            payload_as_string = 'off'
             state = False
         elif switch['type'] == 'pwm':
             try:
