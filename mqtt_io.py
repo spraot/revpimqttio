@@ -111,7 +111,11 @@ class MqttLightControl():
     def configure_mqtt_for_switch(self, switch):
         switch_configuration = {
             "command_topic": switch["mqtt_command_topic"],
+            "schema": "template",
+            "command_on_template": "on",
+            "command_off_template": "off",
             "state_topic": switch["mqtt_state_topic"],
+            "state_template": "{{ value }}",
             "availability": [
                 {'topic': self.availability_topic},
                 {'topic': switch["mqtt_availability_topic"]},
