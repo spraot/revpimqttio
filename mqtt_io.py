@@ -30,6 +30,7 @@ class MqttLightControl():
     mqtt_server_user = ""
     mqtt_server_password = ""
     switch_mqtt_topic_map = {}
+    unique_id_suffix = '_mqttio'
 
     default_switch = {
         'name': 'Switch',
@@ -75,7 +76,7 @@ class MqttLightControl():
         with open(self.config_file, 'r') as f:
             config = yaml.safe_load(f)
 
-        for key in ['topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'switches']:
+        for key in ['topic_prefix', 'homeassistant_prefix', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'switches', 'unique_id_suffix']:
             try:
                 self.__setattr__(key, config[key])
             except KeyError:
@@ -92,7 +93,7 @@ class MqttLightControl():
                     switch[k] = v
 
             if not 'unique_id' in switch:
-                switch['unique_id'] = switch["id"].replace('/', '_')
+                switch['unique_id'] = switch["id"].replace('/', '_')+self.unique_id_suffix
 
             if switch['type'] == 'pwm':
                 component = 'sensor'
