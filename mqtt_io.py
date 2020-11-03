@@ -82,6 +82,8 @@ class MqttLightControl():
             except KeyError:
                 pass
 
+        self.availability_topic = self.topic_prefix + '/bridge/state'
+
         for switch in self.switches:
             if not 'id' in switch:
                 raise SyntaxError('Cannot load configuration: switch does not have ''id''')
@@ -110,13 +112,24 @@ class MqttLightControl():
         switch_configuration = {
             "command_topic": switch["mqtt_command_topic"],
             "state_topic": switch["mqtt_state_topic"],
-            "availability_topic": switch["mqtt_availability_topic"],
+            "availability": [
+                switch["mqtt_availability_topic"],
+            ],
             "retain": False,
-            "device": {"identifiers": switch["unique_id"]}
+            "device": {
+                "identifiers": [switch["unique_id"],
+                "manufacturer": "KUNBUS GmbH",
+                "model": "RevPi Digital IO",
+                "sw_version": "mqttio"
+                }
         }
 
         if switch['type'] == 'pwm':
             switch_configuration['unit_of_measurement'] = '%'
+
+        if switch['type'] == 'light':
+            switch_configuration['brightness'] = False
+            switch_configuration['color_temp'] = False
 
         try:
             switch_configuration['name'] = switch["name"]
@@ -181,6 +194,7 @@ class MqttLightControl():
         except AttributeError:
             pass
 
+        self.mqttclient.publish(self.availability_topic, payload="offline")
         for switch in self.switches:
             self.set_switch_state(switch, 0)
             self.mqtt_broadcast_switch_availability(switch, "offline")
@@ -198,7 +212,8 @@ class MqttLightControl():
         for switch in self.switches:
             self.configure_mqtt_for_switch(switch)
 
-        #Broadcast current switch state to MQTT for switches
+        #Broadcast current switch state to MQTT
+        self.mqttclient.publish(self.availability_topic, payload="online")
         for switch in self.switches:
             self.mqtt_broadcast_switch_availability(switch, "online")
 
