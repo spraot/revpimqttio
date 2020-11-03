@@ -95,7 +95,8 @@ class MqttLightControl():
                     switch[k] = v
 
             if not 'unique_id' in switch:
-                switch['unique_id'] = switch["id"].replace('/', '_')+self.unique_id_suffix
+                switch['unique_id'] = switch["id"].replace('/', '_')
+            switch['unique_id'] += self.unique_id_suffix
 
             if switch['type'] == 'pwm':
                 component = 'sensor'
@@ -127,7 +128,8 @@ class MqttLightControl():
                 "model": "RevPi Digital IO",
                 "name": "RevPi "+switch['type'],
                 "sw_version": "mqttio"
-                }
+            },
+            "unique_id": switch["unique_id"]
         }
 
         if switch['type'] == 'pwm':
@@ -139,8 +141,6 @@ class MqttLightControl():
             switch_configuration['name'] = switch["unique_id"]
 
         switch_configuration['device']['name'] = switch_configuration["name"]
-
-        switch_configuration['unique_id'] = switch["unique_id"]
 
         # try:
         #     switch_configuration['icon'] = "mdi:" + switch["md-icon"]
