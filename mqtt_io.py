@@ -102,7 +102,7 @@ class MqttLightControl():
             else:
                 component = switch['type']
 
-            switch["mqtt_config_topic"] = "{}/{}/{}/config".format(self.homeassistant_prefix, component, switch["id"])
+            switch["mqtt_config_topic"] = "{}/{}/{}/config".format(self.homeassistant_prefix, component, switch["unique_id"])
             switch["mqtt_command_topic"] = "{}/{}/set".format(self.topic_prefix, switch["id"])
             switch["mqtt_state_topic"] = "{}/{}/state".format(self.topic_prefix, switch["id"])
             switch["mqtt_availability_topic"] = "{}/{}/availability".format(self.topic_prefix, switch["id"])
@@ -195,7 +195,7 @@ class MqttLightControl():
         except AttributeError:
             pass
 
-        self.mqttclient.publish(self.availability_topic, payload="offline")
+        self.mqttclient.publish(self.availability_topic, payload="offline", qos=0, retain=True)
         for switch in self.switches:
             self.set_switch_state(switch, 0)
             self.mqtt_broadcast_switch_availability(switch, "offline")
@@ -214,7 +214,7 @@ class MqttLightControl():
             self.configure_mqtt_for_switch(switch)
 
         #Broadcast current switch state to MQTT
-        self.mqttclient.publish(self.availability_topic, payload="online")
+        self.mqttclient.publish(self.availability_topic, payload="online", qos=0, retain=True)
         for switch in self.switches:
             self.mqtt_broadcast_switch_availability(switch, "online")
 
@@ -263,7 +263,7 @@ class MqttLightControl():
 
     def mqtt_broadcast_switch_availability(self, switch, value):
        logging.debug("Broadcasting MQTT message on topic: " + switch["mqtt_availability_topic"] + ", value: " + value)
-       self.mqttclient.publish(switch["mqtt_availability_topic"], payload=value, qos=0, retain=True)
+       self.mqttclient.publish(switch["mqtt_availability_topic"], payload=value, qos=0, retain=False)
 
     def mqtt_broadcast_state(self, switch, state):
         logging.debug("Broadcasting MQTT message on topic: " + switch["mqtt_state_topic"] + ", value: " + state)
