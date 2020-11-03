@@ -113,8 +113,8 @@ class MqttLightControl():
             "command_topic": switch["mqtt_command_topic"],
             "state_topic": switch["mqtt_state_topic"],
             "availability": [
-                self.availability_topic,
-                switch["mqtt_availability_topic"],
+                {'topic': self.availability_topic},
+                {'topic': switch["mqtt_availability_topic"]},
             ],
             "retain": False,
             "device": {
