@@ -113,11 +113,12 @@ class MqttLightControl():
             "command_topic": switch["mqtt_command_topic"],
             "state_topic": switch["mqtt_state_topic"],
             "availability": [
+                self.availability_topic,
                 switch["mqtt_availability_topic"],
             ],
             "retain": False,
             "device": {
-                "identifiers": [switch["unique_id"],
+                "identifiers": [switch["unique_id"]],
                 "manufacturer": "KUNBUS GmbH",
                 "model": "RevPi Digital IO",
                 "sw_version": "mqttio"
