@@ -125,7 +125,7 @@ class MqttLightControl():
                 "identifiers": [switch["unique_id"]],
                 "manufacturer": "KUNBUS GmbH",
                 "model": "RevPi Digital IO",
-                "name": "RevPi "+switch['type']
+                "name": "RevPi "+switch['type'],
                 "sw_version": "mqttio"
                 }
         }
