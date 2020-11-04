@@ -142,11 +142,6 @@ class MqttLightControl():
 
         switch_configuration['device']['name'] = switch_configuration["name"]
 
-        # try:
-        #     switch_configuration['icon'] = "mdi:" + switch["md-icon"]
-        # except KeyError:
-        #     pass
-
         json_conf = json.dumps(switch_configuration)
         logging.debug("Broadcasting homeassistant configuration for switch: " + switch["name"] + ":" + json_conf)
         self.mqttclient.publish(switch["mqtt_config_topic"], payload=json_conf, qos=0, retain=True)
@@ -215,7 +210,6 @@ class MqttLightControl():
             self.configure_mqtt_for_switch(switch)
 
         #Broadcast current switch state to MQTT
-        self.mqttclient.publish(self.availability_topic, payload="online", qos=0, retain=True)
         for switch in self.switches:
             self.mqtt_broadcast_switch_availability(switch, "online")
 
@@ -223,6 +217,8 @@ class MqttLightControl():
         for switch in self.switches:
             self.mqttclient.subscribe(switch["mqtt_command_topic"])
             self.mqttclient.subscribe(switch["mqtt_state_topic"])
+
+        self.mqttclient.publish(self.availability_topic, payload="online", qos=0, retain=True)
 
     def mqtt_on_message(self, client, userdata, msg):
         payload_as_string = msg.payload.decode('utf-8')
