@@ -223,7 +223,7 @@ class MqttLightControl():
 
     def mqtt_on_message(self, client, userdata, msg):
         payload = msg.payload.decode('utf-8').strip()
-        logging.info("Received MQTT message on topic: " + msg.topic + ", payload: " + payload_as_string + ", retained: " + str(msg.retain))
+        logging.info("Received MQTT message on topic: " + msg.topic + ", payload: " + payload + ", retained: " + str(msg.retain))
 
         try:
             switch = self.switch_mqtt_topic_map[str(msg.topic)]
