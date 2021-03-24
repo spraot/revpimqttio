@@ -9,6 +9,7 @@
 #md-icon see
 #https://cdn.materialdesignicons.com/4.5.95/
 
+from json.decoder import JSONDecodeError
 import os
 import sys
 import json
@@ -221,33 +222,50 @@ class MqttLightControl():
         self.mqttclient.publish(self.availability_topic, payload="online", qos=0, retain=True)
 
     def mqtt_on_message(self, client, userdata, msg):
-        payload_as_string = msg.payload.decode('utf-8')
+        payload = msg.payload.decode('utf-8').strip()
         logging.info("Received MQTT message on topic: " + msg.topic + ", payload: " + payload_as_string + ", retained: " + str(msg.retain))
 
-        switch = self.switch_mqtt_topic_map[str(msg.topic)]
-        logging.debug("Found switch matching MQTT message: " + switch["name"])
+        try:
+            switch = self.switch_mqtt_topic_map[str(msg.topic)]
+            logging.debug("Found switch matching MQTT message: " + switch["name"])
+        except KeyError:
+            logging.error("Could not find switch corresponding to topic " + msg.topic)
+            return
 
         if msg.topic == switch['mqtt_state_topic'] and not msg.retain:
             return
 
-        if payload_as_string.upper() == "ON":
-            payload_as_string = 'on'
+        try:
+            payload = json.loads(payload)
+        except JSONDecodeError:
+            payload = {'state': payload}
+
+        if 'state' not in payload:
+            return
+
+        state = None
+        if payload['state'].upper() == "ON":
+            payload['state'] = 'on'
             state = True
-        elif payload_as_string.upper() == "OFF":
-            payload_as_string = 'off'
+        elif payload['state'].upper() == "OFF":
+            payload['state'] = 'off'
             state = False
+        elif payload['state'].upper() == "TOGGLE":
+            state = not self.rpi.io[switch["output_id"]].value
+            payload['state'] = 'on' if state else 'off'
         elif switch['type'] == 'pwm':
             try:
-                state = float(payload_as_string)
+                state = float(payload['state'])
                 if state < 0 or state > 100:
                     raise ValueError('pwm command must be percent value between 0 and 100')
             except ValueError:
-                logging.error("Setting output state to " + payload_as_string + " not supported for pwm type, must be percent: 0 <= x <= 100")
+                logging.error("Setting output state to " + payload['state'] + " not supported for pwm type, must be percent: 0 <= x <= 100")
         else:
-            logging.error("Setting output state to " + payload_as_string + " not supported for switch type")
+            logging.error("Setting output state to " + payload['state'] + " not supported for switch type")
         
-        self.set_switch_state(switch, state)
-        self.mqtt_broadcast_state(switch, payload_as_string)
+        if state is not None:
+            self.set_switch_state(switch, state)
+            self.mqtt_broadcast_state(switch, payload['state'])
 
     def set_switch_state(self, switch, state):
         logging.debug("Setting output " + switch["output_id"] + " to " + str(state))
