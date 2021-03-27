@@ -235,9 +235,9 @@ class MqttLightControl():
         if msg.topic == switch['mqtt_state_topic'] and not msg.retain:
             return
 
-        try:
+        if payload.startswith('{'):
             payload = json.loads(payload)
-        except JSONDecodeError:
+        else:
             payload = {'state': payload}
 
         if 'state' not in payload:
