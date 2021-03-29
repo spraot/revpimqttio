@@ -54,6 +54,8 @@ class MqttLightControl():
         for switch in self.switches:
             self.switch_mqtt_topic_map[switch["mqtt_command_topic"]] = switch
             self.switch_mqtt_topic_map[switch["mqtt_state_topic"]] = switch
+            if 'group_command_topic' in switch:
+                self.switch_mqtt_topic_map.setdefault(switch['group_command_topic'], []).append(switch)
 
         #RPI init
         self.rpi = revpimodio2.RevPiModIO(autorefresh=True, direct_output=True, configrsc='/config.rsc')
@@ -227,6 +229,12 @@ class MqttLightControl():
 
         try:
             switch = self.switch_mqtt_topic_map[str(msg.topic)]
+            if isinstance(switch, list):
+                switch_group = switch
+                switch = switch_group[0]
+                logging.debug('Found switch group containing {} switches'.format(len(switch_group)))
+            else:
+                switch_group = [switch]
             logging.debug("Found switch matching MQTT message: " + switch["name"])
         except KeyError:
             logging.error("Could not find switch corresponding to topic " + msg.topic)
@@ -236,36 +244,36 @@ class MqttLightControl():
             return
 
         if payload.startswith('{'):
-            payload = json.loads(payload)
-        else:
-            payload = {'state': payload}
-
-        if 'state' not in payload:
-            return
-
-        state = None
-        if payload['state'].upper() == "ON":
-            payload['state'] = 'on'
-            state = True
-        elif payload['state'].upper() == "OFF":
-            payload['state'] = 'off'
-            state = False
-        elif payload['state'].upper() == "TOGGLE":
-            state = not self.rpi.io[switch["output_id"]].value
-            payload['state'] = 'on' if state else 'off'
-        elif switch['type'] == 'pwm':
+            payload_json = json.loads(payload)
             try:
-                state = float(payload['state'])
-                if state < 0 or state > 100:
-                    raise ValueError('pwm command must be percent value between 0 and 100')
-            except ValueError:
-                logging.error("Setting output state to " + payload['state'] + " not supported for pwm type, must be percent: 0 <= x <= 100")
+                payload = payload_json['state'].lower()
+            except KeyError:
+                return
         else:
-            logging.error("Setting output state to " + payload['state'] + " not supported for switch type")
-        
-        if state is not None:
-            self.set_switch_state(switch, state)
-            self.mqtt_broadcast_state(switch, payload['state'])
+            payload = payload.lower()
+
+        if payload == "toggle":
+            payload = 'off' if self.rpi.io[switch["output_id"]].value else 'on'
+
+        for s in switch_group:
+            state = None
+            if payload == "on":
+                state = True
+            elif payload == "off":
+                state = False
+            elif s['type'] == 'pwm':
+                try:
+                    state = float(payload)
+                    if state < 0 or state > 100:
+                        raise ValueError('pwm command must be percent value between 0 and 100')
+                except ValueError:
+                    logging.error("Setting output state to " + payload + " not supported for pwm type, must be percent: 0 <= x <= 100")
+            else:
+                logging.error("Setting output state to " + payload + " not supported for switch type")
+            
+            if state is not None:
+                self.set_switch_state(s, state)
+                self.mqtt_broadcast_state(s, payload)
 
     def set_switch_state(self, switch, state):
         logging.debug("Setting output " + switch["output_id"] + " to " + str(state))
