@@ -54,7 +54,7 @@ class MqttLightControl():
         for switch in self.switches:
             self.switch_mqtt_topic_map[switch["mqtt_command_topic"]] = switch
             self.switch_mqtt_topic_map[switch["mqtt_state_topic"]] = switch
-            try
+            try:
                 self.switch_mqtt_topic_map.setdefault(switch['group_command_topic'], []).append(switch)
             except KeyError:
                 pass
