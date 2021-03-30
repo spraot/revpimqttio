@@ -54,8 +54,10 @@ class MqttLightControl():
         for switch in self.switches:
             self.switch_mqtt_topic_map[switch["mqtt_command_topic"]] = switch
             self.switch_mqtt_topic_map[switch["mqtt_state_topic"]] = switch
-            if 'group_command_topic' in switch:
+            try
                 self.switch_mqtt_topic_map.setdefault(switch['group_command_topic'], []).append(switch)
+            except KeyError:
+                pass
 
         #RPI init
         self.rpi = revpimodio2.RevPiModIO(autorefresh=True, direct_output=True, configrsc='/config.rsc')
@@ -217,9 +219,8 @@ class MqttLightControl():
             self.mqtt_broadcast_switch_availability(switch, "online")
 
         #Subsribe to MQTT switch updates
-        for switch in self.switches:
-            self.mqttclient.subscribe(switch["mqtt_command_topic"])
-            self.mqttclient.subscribe(switch["mqtt_state_topic"])
+        for topic in self.switch_mqtt_topic_map:
+            self.mqttclient.subscribe(topic)
 
         self.mqttclient.publish(self.availability_topic, payload="online", qos=0, retain=True)
 
