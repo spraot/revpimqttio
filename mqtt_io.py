@@ -52,8 +52,8 @@ class MqttLightControl():
 
         #Construct map for fast indexing
         for switch in self.switches:
-            self.switch_mqtt_topic_map[switch["mqtt_command_topic"]] = switch
-            self.switch_mqtt_topic_map[switch["mqtt_state_topic"]] = switch
+            self.switch_mqtt_topic_map.setdefault(switch['mqtt_command_topic'], []).append(switch)
+            self.switch_mqtt_topic_map.setdefault(switch['mqtt_state_topic'], []).append(switch)
             try:
                 self.switch_mqtt_topic_map.setdefault(switch['group_command_topic'], []).append(switch)
             except KeyError:
@@ -107,6 +107,14 @@ class MqttLightControl():
                 component = 'sensor'
             else:
                 component = switch['type']
+
+            if not 'minBrightness' in switch:
+                switch['minBrightness'] = 1
+            else:
+                try:
+                    switch['minBrightness'] = float(switch['minBrightness'])
+                except ValueError:
+                    raise SyntaxError("Cannot load configuration: minBrightness must be a number".format(payload_brightness))
 
             switch["mqtt_config_topic"] = "{}/{}/{}/config".format(self.homeassistant_prefix, component, switch["unique_id"])
             switch["mqtt_command_topic"] = "{}/{}/set".format(self.topic_prefix, switch["id"])
@@ -229,52 +237,61 @@ class MqttLightControl():
         logging.info("Received MQTT message on topic: " + msg.topic + ", payload: " + payload + ", retained: " + str(msg.retain))
 
         try:
-            switch = self.switch_mqtt_topic_map[str(msg.topic)]
-            if isinstance(switch, list):
-                switch_group = switch
-                switch = switch_group[0]
-                logging.debug('Found switch group containing {} switches'.format(len(switch_group)))
-            else:
-                switch_group = [switch]
-            logging.debug("Found switch matching MQTT message: " + switch["name"])
+            switch_group = self.switch_mqtt_topic_map[str(msg.topic)]
+            logging.debug("Found switch(es) matching MQTT message: " + ', '.join(s["name"] for s in switch_group))
         except KeyError:
             logging.error("Could not find switch corresponding to topic " + msg.topic)
             return
 
-        if msg.topic == switch['mqtt_state_topic'] and not msg.retain:
-            return
-
+        payload_brightness = None
         if payload.startswith('{'):
             payload_json = json.loads(payload)
             try:
-                payload = payload_json['state'].lower()
+                payload_state = payload_json['state'].lower()
             except KeyError:
-                return
+                payload_state = ''
+            try:
+                payload_brightness = payload_json['brightness']
+            except KeyError:
+                pass
         else:
-            payload = payload.lower()
-
-        if payload == "toggle":
-            payload = 'off' if self.rpi.io[switch["output_id"]].value else 'on'
+            payload_state = payload.lower()
 
         for s in switch_group:
+            if msg.topic == s['mqtt_state_topic'] and not msg.retain:
+                continue
+
+            broadcast_state = payload_state
             state = None
-            if payload == "on":
+            if payload_state == "toggle":
+                state = not self.rpi.io[s["output_id"]].value
+                broadcast_state = 'on' if state else 'off'
+            elif payload_state == "on":
                 state = True
-            elif payload == "off":
+            elif payload_state == "off":
                 state = False
             elif s['type'] == 'pwm':
                 try:
-                    state = float(payload)
+                    state = float(payload_state)
                     if state < 0 or state > 100:
                         raise ValueError('pwm command must be percent value between 0 and 100')
                 except ValueError:
-                    logging.error("Setting output state to " + payload + " not supported for pwm type, must be percent: 0 <= x <= 100")
-            else:
-                logging.error("Setting output state to " + payload + " not supported for switch type")
+                    logging.error("Setting output state to " + payload_state + " not supported for pwm type, must be percent: 0 <= x <= 100")
+                    continue
+            elif payload_brightness is None:
+                logging.error("Setting output state to " + payload_state + " not supported for switch type")
+                continue
             
-            if state is not None:
-                self.set_switch_state(s, state)
-                self.mqtt_broadcast_state(s, payload)
+            if state != 'off' and payload_brightness is not None:
+                try:
+                    state = float(payload_brightness) >= s['minBrightness']
+                except ValueError:
+                    logging.error("Cannot apply brightness {}, brightness must be a number".format(payload_brightness))
+                    continue
+                broadcast_state = 'on' if state else 'off'
+
+            self.set_switch_state(s, state)
+            self.mqtt_broadcast_state(s, broadcast_state)
 
     def set_switch_state(self, switch, state):
         logging.debug("Setting output " + switch["output_id"] + " to " + str(state))
