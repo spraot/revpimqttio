@@ -108,13 +108,13 @@ class MqttLightControl():
             else:
                 component = switch['type']
 
-            if not 'minBrightness' in switch:
-                switch['minBrightness'] = 1
+            if not 'min_brightness' in switch:
+                switch['min_brightness'] = 1
             else:
                 try:
-                    switch['minBrightness'] = float(switch['minBrightness'])
+                    switch['min_brightness'] = float(switch['min_brightness'])
                 except ValueError:
-                    raise SyntaxError("Cannot load configuration: minBrightness must be a number".format(payload_brightness))
+                    raise SyntaxError("Cannot load configuration: min_brightness must be a number".format(payload_brightness))
 
             switch["mqtt_config_topic"] = "{}/{}/{}/config".format(self.homeassistant_prefix, component, switch["unique_id"])
             switch["mqtt_command_topic"] = "{}/{}/set".format(self.topic_prefix, switch["id"])
@@ -284,7 +284,7 @@ class MqttLightControl():
             
             if state != 'off' and payload_brightness is not None:
                 try:
-                    state = float(payload_brightness) >= s['minBrightness']
+                    state = float(payload_brightness) >= s['min_brightness']
                 except ValueError:
                     logging.error("Cannot apply brightness {}, brightness must be a number".format(payload_brightness))
                     continue
