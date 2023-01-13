@@ -245,7 +245,11 @@ class MqttLightControl():
 
         payload_brightness = None
         if payload.startswith('{'):
-            payload_json = json.loads(payload)
+            try:
+                payload_json = json.loads(payload)
+            except json.decoder.JSONDecodeError:
+                logging.error('Could not decode JSON sent on topic "{}": {}'.format(msg.topic, payload))
+                return
             try:
                 payload_state = payload_json['state'].lower()
             except KeyError:
