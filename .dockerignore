@@ -1,0 +1,27 @@
+
+*.example.yml
+# App
+*config.yml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+## Git
+/.git
+/.gitignore
+
+## Docker
+Dockerfile
+/.dockerignore
+.env
+docker-compose.yml
+
+## macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+.vscode/

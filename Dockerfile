@@ -1,9 +1,10 @@
-FROM python:3.9-alpine3.12
+FROM python:3.11-slim-bullseye
 
-ENV LANG C.UTF-8  
-ENV LC_ALL C.UTF-8  
+ENV LANG C.UTF-8
+ENV LC_ALL C.UTF-8
 
-RUN apk add --no-cache build-base gcc make linux-headers
+RUN apt-get update \
+    & apt-get -y upgrade
 
 WORKDIR /app
 
