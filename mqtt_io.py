@@ -131,8 +131,8 @@ class MqttLightControl():
             "state_topic": switch["mqtt_state_topic"],
             "state_template": "{{ value }}",
             "availability": [
-                {'topic': self.availability_topic},
-                {'topic': switch["mqtt_availability_topic"]},
+                {'topic': self.availability_topic, 'value_template': '{{ value_jason.state }}'},
+                {'topic': switch["mqtt_availability_topic"], 'value_template': '{{ value_jason.state }}'},
             ],
             "retain": False,
             "device": {
@@ -204,10 +204,9 @@ class MqttLightControl():
         except AttributeError:
             pass
 
-        self.mqttclient.publish(self.availability_topic, payload="offline", qos=0, retain=True)
         for switch in self.switches:
             self.set_switch_state(switch, 0)
-            self.mqtt_broadcast_switch_availability(switch, "offline")
+            self.mqtt_broadcast_switch_availability(switch, '{"state": "offline"}')
 
         self.rpi.core.A1 = revpimodio2.OFF
         self.mqttclient.disconnect()
@@ -224,13 +223,14 @@ class MqttLightControl():
 
         #Broadcast current switch state to MQTT
         for switch in self.switches:
-            self.mqtt_broadcast_switch_availability(switch, "online")
+            self.mqtt_broadcast_switch_availability(switch, '{"state": "online"}')
 
         #Subsribe to MQTT switch updates
         for topic in self.switch_mqtt_topic_map:
             self.mqttclient.subscribe(topic)
 
-        self.mqttclient.publish(self.availability_topic, payload="online", qos=0, retain=True)
+        self.mqttclient.publish(self.availability_topic, payload='{"state": "online"}', qos=0, retain=True)
+        self.mqttclient.will_set(self.availability_topic, payload='{"state": "offline"}', qos=0, retain=True)
 
     def mqtt_on_message(self, client, userdata, msg):
         payload = msg.payload.decode('utf-8').strip()
