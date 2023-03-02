@@ -118,7 +118,7 @@ class MqttLightControl():
 
             switch["mqtt_config_topic"] = "{}/{}/{}/config".format(self.homeassistant_prefix, component, switch["unique_id"])
             switch["mqtt_command_topic"] = "{}/{}/set".format(self.topic_prefix, switch["id"])
-            switch["mqtt_state_topic"] = "{}/{}/state".format(self.topic_prefix, switch["id"])
+            switch["mqtt_state_topic"] = "{}/{}".format(self.topic_prefix, switch["id"])
             switch["mqtt_availability_topic"] = "{}/{}/availability".format(self.topic_prefix, switch["id"])
 
 
@@ -129,7 +129,7 @@ class MqttLightControl():
             "command_on_template": "on",
             "command_off_template": "off",
             "state_topic": switch["mqtt_state_topic"],
-            "state_template": "{{ value }}",
+            "state_template": "{{ value_jason.state }}",
             "availability": [
                 {'topic': self.availability_topic, 'value_template': '{{ value_jason.state }}'},
                 {'topic': switch["mqtt_availability_topic"], 'value_template': '{{ value_jason.state }}'},
@@ -234,7 +234,7 @@ class MqttLightControl():
 
     def mqtt_on_message(self, client, userdata, msg):
         payload = msg.payload.decode('utf-8').strip()
-        logging.info("Received MQTT message on topic: " + msg.topic + ", payload: " + payload + ", retained: " + str(msg.retain))
+        logging.debug("Received MQTT message on topic: " + msg.topic + ", payload: " + payload + ", retained: " + str(msg.retain))
 
         try:
             switch_group = self.switch_mqtt_topic_map[str(msg.topic)]
