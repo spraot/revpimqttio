@@ -9,16 +9,12 @@
 #md-icon see
 #https://cdn.materialdesignicons.com/4.5.95/
 
-from json.decoder import JSONDecodeError
 import os
 import sys
 import json
 import yaml
-import traceback
 import revpimodio2
 import paho.mqtt.client as mqtt
-import time
-import threading
 import logging
 import atexit
 
@@ -118,7 +114,7 @@ class MqttLightControl():
 
             switch["mqtt_config_topic"] = "{}/{}/{}/config".format(self.homeassistant_prefix, component, switch["unique_id"])
             switch["mqtt_command_topic"] = "{}/{}/set".format(self.topic_prefix, switch["id"])
-            switch["mqtt_state_topic"] = "{}/{}".format(self.topic_prefix, switch["id"])
+            switch["mqtt_state_topic"] = "{}/{}/state".format(self.topic_prefix, switch["id"])
             switch["mqtt_availability_topic"] = "{}/{}/availability".format(self.topic_prefix, switch["id"])
 
 
@@ -174,44 +170,17 @@ class MqttLightControl():
         self.rpi.mainloop(blocking=False)
         logging.info("RPI client started")
 
-        #Start status thread
-        logging.info("Starting status thread")
-        self.status_thread = threading.Thread(target = self.status_informer, args = (self.rpi,))
-        self.status_thread.service_running = True
-        self.status_thread.start()
-        logging.info("Status started")
-
         logging.info("started")
-
-    def status_informer(self, rpi):
-        thread = threading.currentThread()
-        a1_state = False
-        rpi.core.A1 = revpimodio2.OFF
-
-        while getattr(thread, "service_running", True):
-            if a1_state:
-                rpi.core.A1 = revpimodio2.OFF
-            else:
-                rpi.core.A1 = revpimodio2.GREEN
-
-            a1_state = not a1_state
-            time.sleep(1)
 
     def programend(self):
         logging.info("stopping")
-        try:
-            self.status_thread.service_running = False
-        except AttributeError:
-            pass
 
         for switch in self.switches:
             self.set_switch_state(switch, 0)
-            self.mqtt_broadcast_switch_availability(switch, '{"state": "offline"}')
+            self.mqtt_broadcast_switch_availability(switch, '')
 
-        self.rpi.core.A1 = revpimodio2.OFF
         self.mqttclient.disconnect()
         self.rpi.exit()
-        time.sleep(0.5)
         logging.info("stopped")
 
     def mqtt_on_connect(self, client, userdata, flags, rc):
@@ -310,7 +279,7 @@ class MqttLightControl():
 
     def mqtt_broadcast_switch_availability(self, switch, value):
        logging.debug("Broadcasting MQTT message on topic: " + switch["mqtt_availability_topic"] + ", value: " + value)
-       self.mqttclient.publish(switch["mqtt_availability_topic"], payload=value, qos=0, retain=False)
+       self.mqttclient.publish(switch["mqtt_availability_topic"], payload=value, qos=0, retain=True)
 
     def mqtt_broadcast_state(self, switch, state):
         logging.debug("Broadcasting MQTT message on topic: " + switch["mqtt_state_topic"] + ", value: " + state)
