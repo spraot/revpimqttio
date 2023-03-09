@@ -264,7 +264,7 @@ class MqttLightControl():
             self.mqtt_broadcast_state(s, broadcast_state)
 
     def set_switch_state(self, switch, state):
-        logging.info(f"Setting switch {switch['name']} (output {switch['output_id']}) to {str(state)}")
+        logging.info(f"Setting {switch['name']} ({switch['output_id']}) to {str(state)}")
         if switch['type'] == 'pwm':
             if state == True:
                 state = 100
