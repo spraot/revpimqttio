@@ -99,6 +99,9 @@ class MqttLightControl():
                 switch['unique_id'] = switch["id"].replace('/', '_')
             switch['unique_id'] += self.unique_id_suffix
 
+            if not 'name' in switch:
+                switch['name'] = switch["id"]
+
             if switch['type'] == 'pwm':
                 component = 'sensor'
             else:
@@ -120,6 +123,7 @@ class MqttLightControl():
 
     def configure_mqtt_for_switch(self, switch):
         switch_configuration = {
+            "name": switch["name"],
             "command_topic": switch["mqtt_command_topic"],
             "schema": "template",
             "command_on_template": "on",
@@ -143,13 +147,6 @@ class MqttLightControl():
 
         if switch['type'] == 'pwm':
             switch_configuration['unit_of_measurement'] = '%'
-
-        try:
-            switch_configuration['name'] = switch["name"]
-        except KeyError:
-            switch_configuration['name'] = switch["unique_id"]
-
-        switch_configuration['device']['name'] = switch_configuration["name"]
 
         json_conf = json.dumps(switch_configuration)
         logging.debug("Broadcasting homeassistant configuration for switch: " + switch["name"] + ":" + json_conf)
@@ -267,7 +264,7 @@ class MqttLightControl():
             self.mqtt_broadcast_state(s, broadcast_state)
 
     def set_switch_state(self, switch, state):
-        logging.info("Setting output " + switch["output_id"] + " to " + str(state))
+        logging.info(f"Setting switch {switch['name']} (output {switch['output_id']}) to {str(state)}")
         if switch['type'] == 'pwm':
             if state == True:
                 state = 100
