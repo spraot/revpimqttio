@@ -264,15 +264,18 @@ class MqttLightControl():
             self.mqtt_broadcast_state(s, broadcast_state)
 
     def set_switch_state(self, switch, state):
-        logging.info(f"Setting {switch['name']} ({switch['output_id']}) to {str(state)}")
         if switch['type'] == 'pwm':
             if state == True:
                 state = 100
             if state == False:
                 state = 0
-            self.rpi.io[switch["output_id"]].value = round(state*2.55)
+            new_value = round(state*2.55)
         else:
-            self.rpi.io[switch["output_id"]].value = 1 if state else 0  
+            new_value = 1 if state else 0
+
+        if self.rpi.io[switch["output_id"]].value != new_value:
+            logging.info(f"Setting {switch['name']} ({switch['output_id']}) to {str(state)}")
+            self.rpi.io[switch["output_id"]].value = new_value
 
     def mqtt_broadcast_switch_availability(self, switch, value):
        logging.debug("Broadcasting MQTT message on topic: " + switch["mqtt_availability_topic"] + ", value: " + value)
