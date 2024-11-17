@@ -63,7 +63,7 @@ class MqttLightControl():
                 pass
 
         #RPI init
-        self.rpi = revpimodio2.RevPiModIO(autorefresh=True, direct_output=True, configrsc='/config.rsc')
+        self.rpi = revpimodio2.RevPiModIO(autorefresh=True, shared_procimg=True, configrsc='/config.rsc')
         self.rpi.handlesignalend(self.programend)
 
         # TODO: Check whether PWM is enabled if type=pwm (see https://revpimodio.org/en/version-2-5-3-2/)
