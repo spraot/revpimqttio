@@ -62,7 +62,7 @@ class MqttLightControl():
         # TODO: Check whether PWM is enabled if type=pwm (see https://revpimodio.org/en/version-2-5-3-2/)
 
         #MQTT init
-        self.mqttclient = mqtt.Client()
+        self.mqttclient = mqtt.Client(CallbackAPIVersion.VERSION1)
         self.mqttclient.on_connect = self.mqtt_on_connect
         self.mqttclient.on_message = self.mqtt_on_message
 
