@@ -16,7 +16,15 @@ import yaml
 import revpimodio2
 import paho.mqtt.client as mqtt
 import logging
+from pythonjsonlogger import jsonlogger
 import atexit
+
+logger = logging.getLogger()
+logHandler = logging.StreamHandler()
+formatter = jsonlogger.JsonFormatter('%(message)%(levelname)', timestamp='dt')
+logHandler.setFormatter(formatter)
+logger.addHandler(logHandler)
+logger.setLevel(os.environ.get('LOGLEVEL', 'INFO'))
 
 class MqttLightControl():
     config_file = 'config.yml'
@@ -38,8 +46,7 @@ class MqttLightControl():
     switches = []
 
     def __init__(self):
-        logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"), format='%(asctime)s;<%(levelname)s>;%(message)s')
-        logging.info("Init")
+        logger.info("Init")
 
         if len(sys.argv) > 1:
             self.config_file = sys.argv[1]
@@ -69,10 +76,10 @@ class MqttLightControl():
          #Register program end event
         atexit.register(self.programend)
 
-        logging.info("init done")
+        logger.info("init done")
 
     def load_config(self):
-        logging.info("Reading config from "+self.config_file)
+        logger.info("Reading config from "+self.config_file)
 
         with open(self.config_file, 'r') as f:
             config = yaml.safe_load(f)
@@ -149,28 +156,28 @@ class MqttLightControl():
             switch_configuration['unit_of_measurement'] = '%'
 
         json_conf = json.dumps(switch_configuration)
-        logging.debug("Broadcasting homeassistant configuration for switch: " + switch["name"] + ":" + json_conf)
+        logger.debug("Broadcasting homeassistant configuration for switch: " + switch["name"] + ":" + json_conf)
         self.mqttclient.publish(switch["mqtt_config_topic"], payload=json_conf, qos=0, retain=True)
 
     def start(self):
-        logging.info("starting")
+        logger.info("starting")
 
         #MQTT startup
-        logging.info("Starting MQTT client")
+        logger.info("Starting MQTT client")
         self.mqttclient.username_pw_set(self.mqtt_server_user, password=self.mqtt_server_password)
         self.mqttclient.connect(self.mqtt_server_ip, self.mqtt_server_port, 60)
         self.mqttclient.loop_start()
-        logging.info("MQTT client started")
+        logger.info("MQTT client started")
 
         #RPI startup
-        logging.info("Starting RPI client")
+        logger.info("Starting RPI client")
         self.rpi.mainloop(blocking=False)
-        logging.info("RPI client started")
+        logger.info("RPI client started")
 
-        logging.info("started")
+        logger.info("started")
 
     def programend(self):
-        logging.info("stopping")
+        logger.info("stopping")
 
         for switch in self.switches:
             self.set_switch_state(switch, 0)
@@ -178,10 +185,10 @@ class MqttLightControl():
 
         self.mqttclient.disconnect()
         self.rpi.exit()
-        logging.info("stopped")
+        logger.info("stopped")
 
     def mqtt_on_connect(self, client, userdata, flags, rc):
-        logging.info("MQTT client connected with result code "+str(rc))
+        logger.info("MQTT client connected with result code "+str(rc))
 
         #Configure MQTT for switches
         for switch in self.switches:
@@ -200,13 +207,13 @@ class MqttLightControl():
 
     def mqtt_on_message(self, client, userdata, msg):
         payload = msg.payload.decode('utf-8').strip()
-        logging.debug("Received MQTT message on topic: " + msg.topic + ", payload: " + payload + ", retained: " + str(msg.retain))
+        logger.debug("Received MQTT message on topic: " + msg.topic + ", payload: " + payload + ", retained: " + str(msg.retain))
 
         try:
             switch_group = self.switch_mqtt_topic_map[str(msg.topic)]
-            logging.debug("Found switch(es) matching MQTT message: " + ', '.join(s["name"] for s in switch_group))
+            logger.debug("Found switch(es) matching MQTT message: " + ', '.join(s["name"] for s in switch_group))
         except KeyError:
-            logging.error("Could not find switch corresponding to topic " + msg.topic)
+            logger.error("Could not find switch corresponding to topic " + msg.topic)
             return
 
         payload_brightness = None
@@ -214,7 +221,7 @@ class MqttLightControl():
             try:
                 payload_json = json.loads(payload)
             except json.decoder.JSONDecodeError:
-                logging.error('Could not decode JSON sent on topic "{}": {}'.format(msg.topic, payload))
+                logger.error('Could not decode JSON sent on topic "{}": {}'.format(msg.topic, payload))
                 return
             try:
                 payload_state = payload_json['state'].lower()
@@ -246,17 +253,17 @@ class MqttLightControl():
                     if state < 0 or state > 100:
                         raise ValueError('pwm command must be percent value between 0 and 100')
                 except ValueError:
-                    logging.error("Setting output state to " + payload_state + " not supported for pwm type, must be percent: 0 <= x <= 100")
+                    logger.error("Setting output state to " + payload_state + " not supported for pwm type, must be percent: 0 <= x <= 100")
                     continue
             elif payload_brightness is None:
-                logging.error("Setting output state to " + payload_state + " not supported for switch type")
+                logger.error("Setting output state to " + payload_state + " not supported for switch type")
                 continue
             
             if state != 'off' and payload_brightness is not None:
                 try:
                     state = float(payload_brightness) >= s['min_brightness']
                 except ValueError:
-                    logging.error("Cannot apply brightness {}, brightness must be a number".format(payload_brightness))
+                    logger.error("Cannot apply brightness {}, brightness must be a number".format(payload_brightness))
                     continue
                 broadcast_state = 'on' if state else 'off'
 
@@ -274,15 +281,15 @@ class MqttLightControl():
             new_value = 1 if state else 0
 
         if self.rpi.io[switch["output_id"]].value != new_value:
-            logging.info(f"Setting {switch['name']} ({switch['output_id']}) to {str(state)}")
+            logger.info(f"Setting {switch['name']} ({switch['output_id']}) to {str(state)}")
             self.rpi.io[switch["output_id"]].value = new_value
 
     def mqtt_broadcast_switch_availability(self, switch, value):
-       logging.debug("Broadcasting MQTT message on topic: " + switch["mqtt_availability_topic"] + ", value: " + value)
+       logger.debug("Broadcasting MQTT message on topic: " + switch["mqtt_availability_topic"] + ", value: " + value)
        self.mqttclient.publish(switch["mqtt_availability_topic"], payload=value, qos=0, retain=True)
 
     def mqtt_broadcast_state(self, switch, state):
-        logging.debug("Broadcasting MQTT message on topic: " + switch["mqtt_state_topic"] + ", value: " + state)
+        logger.debug("Broadcasting MQTT message on topic: " + switch["mqtt_state_topic"] + ", value: " + state)
         self.mqttclient.publish(switch["mqtt_state_topic"], payload=state, qos=0, retain=True)
 
 if __name__ == "__main__":
