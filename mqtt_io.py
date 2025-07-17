@@ -230,13 +230,17 @@ class MqttLightControl():
             try:
                 payload_state = payload_json['state'].lower()
             except KeyError:
-                payload_state = ''
+                payload_state = None
             try:
                 payload_brightness = payload_json['brightness']
             except KeyError:
                 pass
         else:
             payload_state = payload.lower()
+
+        if payload_brightness is None and payload_state is None:
+            logger.error(f'Could not find state or brightness in payload: {payload}')
+            return
 
         for s in switch_group:
             if msg.topic == s['mqtt_state_topic'] and not msg.retain:
