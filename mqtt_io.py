@@ -40,6 +40,7 @@ class MqttLightControl():
     mqtt_server_password = ""
     switch_mqtt_topic_map = {}
     group_state_topic_map = {}
+    group_json_state_topic_map = {}
     unique_id_suffix = '_mqttio'
 
     default_switch = {
@@ -73,6 +74,14 @@ class MqttLightControl():
                 if group_command_topic in self.group_state_topic_map and self.group_state_topic_map[group_command_topic] != group_state_topic:
                     raise SyntaxError(f"Cannot load configuration: conflicting group_state_topic values for group_command_topic {group_command_topic}")
                 self.group_state_topic_map[group_command_topic] = group_state_topic
+
+            group_json_state_topic = switch.get('group_json_state_topic')
+            if group_json_state_topic:
+                if not group_command_topic:
+                    raise SyntaxError("Cannot load configuration: group_json_state_topic requires group_command_topic")
+                if group_command_topic in self.group_json_state_topic_map and self.group_json_state_topic_map[group_command_topic] != group_json_state_topic:
+                    raise SyntaxError(f"Cannot load configuration: conflicting group_json_state_topic values for group_command_topic {group_command_topic}")
+                self.group_json_state_topic_map[group_command_topic] = group_json_state_topic
 
         #RPI init
         self.rpi = revpimodio2.RevPiModIO(autorefresh=True, shared_procimg=True, configrsc='/config.rsc')
@@ -290,6 +299,10 @@ class MqttLightControl():
         group_state_topic = self.group_state_topic_map.get(msg.topic)
         if broadcast_state and group_state_topic:
             self.mqttclient.publish(group_state_topic, payload=broadcast_state, qos=0, retain=False)
+
+        group_json_state_topic = self.group_json_state_topic_map.get(msg.topic)
+        if broadcast_state and group_json_state_topic:
+            self.mqttclient.publish(group_json_state_topic, payload=json.dumps({'state': broadcast_state}), qos=0, retain=False)
 
     def set_switch_state(self, switch, state):
         if switch['type'] == 'pwm':
