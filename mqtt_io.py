@@ -88,14 +88,13 @@ class MqttLightControl():
                     raise SyntaxError(f"Cannot load configuration: conflicting group_json_state_topic values for group_command_topic {group_command_topic}")
                 self.group_json_state_topic_map[group_command_topic] = group_json_state_topic
 
-                # Derive the z2m group availability topic from group_command_topic.
-                # z2m publishes {"state":"online"|"offline"} retained at
-                # <group_root>/availability (and "offline" for empty groups), so
-                # we use it as the signal for whether to publish state ourselves.
-                if group_command_topic.endswith('/set'):
-                    avail_topic = group_command_topic[:-len('/set')] + '/availability'
-                else:
-                    avail_topic = group_command_topic + '/availability'
+                # z2m publishes group availability as retained
+                # {"state":"online"|"offline"} at <group_topic>/availability
+                # ("offline" for empty groups). Use it to decide whether we
+                # need to publish state ourselves. group_topic is guaranteed
+                # set here — load_config derives it from group_command_topic
+                # if not explicit.
+                avail_topic = switch['group_topic'] + '/availability'
                 self.group_availability_topic_map[group_command_topic] = avail_topic
                 self.z2m_group_online.setdefault(avail_topic, False)
 
@@ -163,6 +162,21 @@ class MqttLightControl():
             switch["mqtt_command_topic"] = "{}/{}/set".format(self.topic_prefix, switch["id"])
             switch["mqtt_state_topic"] = "{}/{}/state".format(self.topic_prefix, switch["id"])
             switch["mqtt_availability_topic"] = "{}/{}/availability".format(self.topic_prefix, switch["id"])
+
+            # `group_topic` is the canonical base for all per-group topics
+            # (e.g. zigbee2mqtt/<area>/lights); the rest derive from it if
+            # not explicitly set. For backwards compat with configs that
+            # only set `group_command_topic`, reverse-derive `group_topic`
+            # by stripping a trailing /set — but don't auto-fill
+            # `group_json_state_topic` for those, since the legacy semantics
+            # are explicit-opt-in.
+            explicit_group_topic = switch.get('group_topic')
+            if explicit_group_topic:
+                switch.setdefault('group_command_topic', explicit_group_topic + '/set')
+                switch.setdefault('group_json_state_topic', explicit_group_topic)
+            elif switch.get('group_command_topic'):
+                cmd = switch['group_command_topic']
+                switch['group_topic'] = cmd[:-len('/set')] if cmd.endswith('/set') else cmd
 
 
     def configure_mqtt_for_switch(self, switch):
