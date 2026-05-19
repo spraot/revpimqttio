@@ -10,9 +10,11 @@ switches:
     output_id: O_1_1
     md-icon: ceiling-light
     # Optional: bind this switch to a z2m group. group_topic is the canonical
-    # base; group_command_topic and group_json_state_topic derive from it
-    # (`<group_topic>/set` and `<group_topic>` respectively) if not set
-    # explicitly. mqttio defers state publishing to z2m when the group's
-    # `<group_topic>/availability` reports online; otherwise it publishes
-    # itself. group_command_topic alone is also accepted for backwards compat.
+    # base; group_command_topic, group_json_state_topic, and group_state_topic
+    # derive from it (`<group_topic>/set`, `<group_topic>`,
+    # `<group_topic>/state` respectively) if not set explicitly. mqttio defers
+    # state publishing to z2m when the group's `<group_topic>/availability`
+    # reports online; otherwise it publishes itself (UPPERCASE payloads,
+    # matching z2m's casing). group_command_topic alone is also accepted for
+    # backwards compat.
     # group_topic: zigbee2mqtt/office/lights
