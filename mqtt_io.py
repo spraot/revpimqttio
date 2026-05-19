@@ -39,8 +39,17 @@ class MqttLightControl():
     mqtt_server_user = ""
     mqtt_server_password = ""
     switch_mqtt_topic_map = {}
+    # group_command_topic -> per-attribute state topic (`<group_topic>/state`,
+    # plain UPPERCASE payload)
     group_state_topic_map = {}
+    # group_command_topic -> bare-topic JSON state topic (`<group_topic>`,
+    # `{"state":"ON|OFF"}`)
     group_json_state_topic_map = {}
+    # group_command_topic -> derived z2m group availability topic
+    group_availability_topic_map = {}
+    # availability topic -> bool. Default False (= not-online = we publish).
+    # Populated from retained {"state":"online"|"offline"} on connect.
+    z2m_group_online = {}
     unique_id_suffix = '_mqttio'
 
     default_switch = {
@@ -82,6 +91,17 @@ class MqttLightControl():
                 if group_command_topic in self.group_json_state_topic_map and self.group_json_state_topic_map[group_command_topic] != group_json_state_topic:
                     raise SyntaxError(f"Cannot load configuration: conflicting group_json_state_topic values for group_command_topic {group_command_topic}")
                 self.group_json_state_topic_map[group_command_topic] = group_json_state_topic
+
+            if group_state_topic or group_json_state_topic:
+                # z2m publishes group availability as retained
+                # {"state":"online"|"offline"} at <group_topic>/availability
+                # ("offline" for empty groups). Use it to decide whether we
+                # need to publish state ourselves. group_topic is guaranteed
+                # set here — load_config derives it from group_command_topic
+                # if not explicit.
+                avail_topic = switch['group_topic'] + '/availability'
+                self.group_availability_topic_map[group_command_topic] = avail_topic
+                self.z2m_group_online.setdefault(avail_topic, False)
 
         #RPI init
         self.rpi = revpimodio2.RevPiModIO(autorefresh=True, shared_procimg=True, configrsc='/config.rsc')
@@ -147,6 +167,22 @@ class MqttLightControl():
             switch["mqtt_command_topic"] = "{}/{}/set".format(self.topic_prefix, switch["id"])
             switch["mqtt_state_topic"] = "{}/{}/state".format(self.topic_prefix, switch["id"])
             switch["mqtt_availability_topic"] = "{}/{}/availability".format(self.topic_prefix, switch["id"])
+
+            # `group_topic` is the canonical base for all per-group topics
+            # (e.g. zigbee2mqtt/<area>/lights); the rest derive from it if
+            # not explicitly set. For backwards compat with configs that
+            # only set `group_command_topic`, reverse-derive `group_topic`
+            # by stripping a trailing /set — but don't auto-fill the state
+            # topics, since the legacy semantics treat those as explicit
+            # opt-in.
+            explicit_group_topic = switch.get('group_topic')
+            if explicit_group_topic:
+                switch.setdefault('group_command_topic', explicit_group_topic + '/set')
+                switch.setdefault('group_json_state_topic', explicit_group_topic)
+                switch.setdefault('group_state_topic', explicit_group_topic + '/state')
+            elif switch.get('group_command_topic'):
+                cmd = switch['group_command_topic']
+                switch['group_topic'] = cmd[:-len('/set')] if cmd.endswith('/set') else cmd
 
 
     def configure_mqtt_for_switch(self, switch):
@@ -223,12 +259,29 @@ class MqttLightControl():
         for topic in self.switch_mqtt_topic_map:
             self.mqttclient.subscribe(topic)
 
+        #Subscribe to z2m group availability topics so we can defer to z2m
+        #when its groups have online members.
+        for avail_topic in set(self.group_availability_topic_map.values()):
+            self.mqttclient.subscribe(avail_topic)
+
         self.mqttclient.publish(self.availability_topic, payload='{"state": "online"}', qos=0, retain=True)
         self.mqttclient.will_set(self.availability_topic, payload='{"state": "offline"}', qos=0, retain=True)
 
     def mqtt_on_message(self, client, userdata, msg):
         payload = msg.payload.decode('utf-8').strip()
         logger.debug("Received MQTT message on topic: " + msg.topic + ", payload: " + payload + ", retained: " + str(msg.retain))
+
+        # Availability tracking branch: z2m publishes group availability at
+        # <group_root>/availability as retained JSON {"state":"online"|"offline"}.
+        # Anything other than positively-online (missing, parse error, "offline")
+        # is treated as not-online so we'll publish state ourselves.
+        if msg.topic in self.z2m_group_online:
+            try:
+                self.z2m_group_online[msg.topic] = json.loads(payload).get('state') == 'online'
+            except (json.decoder.JSONDecodeError, AttributeError):
+                self.z2m_group_online[msg.topic] = False
+            logger.debug(f"z2m group availability on {msg.topic}: {'online' if self.z2m_group_online[msg.topic] else 'not-online'}")
+            return
 
         try:
             switch_group = self.switch_mqtt_topic_map[str(msg.topic)]
@@ -297,12 +350,26 @@ class MqttLightControl():
             self.mqtt_broadcast_state(s, broadcast_state)
 
         group_state_topic = self.group_state_topic_map.get(msg.topic)
-        if broadcast_state and group_state_topic:
-            self.mqttclient.publish(group_state_topic, payload=broadcast_state, qos=0, retain=False)
-
         group_json_state_topic = self.group_json_state_topic_map.get(msg.topic)
-        if broadcast_state and group_json_state_topic:
-            self.mqttclient.publish(group_json_state_topic, payload=json.dumps({'state': broadcast_state}), qos=0, retain=False)
+        if broadcast_state and (group_state_topic or group_json_state_topic):
+            avail_topic = self.group_availability_topic_map.get(msg.topic)
+            # Defer to z2m only when its group availability is positively "online".
+            # Missing/offline/parse-error → publish ourselves.
+            if not (avail_topic and self.z2m_group_online.get(avail_topic, False)):
+                if group_state_topic:
+                    self.mqttclient.publish(
+                        group_state_topic,
+                        payload=broadcast_state.upper(),
+                        qos=0,
+                        retain=False,
+                    )
+                if group_json_state_topic:
+                    self.mqttclient.publish(
+                        group_json_state_topic,
+                        payload=json.dumps({'state': broadcast_state.upper()}),
+                        qos=0,
+                        retain=False,
+                    )
 
     def set_switch_state(self, switch, state):
         if switch['type'] == 'pwm':
