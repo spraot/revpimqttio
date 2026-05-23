@@ -39,11 +39,12 @@ class MqttLightControl():
     mqtt_server_user = ""
     mqtt_server_password = ""
     switch_mqtt_topic_map = {}
-    # group_command_topic -> per-attribute state topic (`<group_topic>/state`,
-    # plain UPPERCASE payload)
+    # group_command_topic -> per-attribute state topic. Populated for
+    # conflict detection during load_config; the runtime mirror reads
+    # the per-switch group_state_topic directly.
     group_state_topic_map = {}
-    # group_command_topic -> bare-topic JSON state topic (`<group_topic>`,
-    # `{"state":"ON|OFF"}`)
+    # group_command_topic -> bare-topic JSON state topic. Same shape and
+    # purpose as group_state_topic_map.
     group_json_state_topic_map = {}
     # group_command_topic -> derived z2m group availability topic
     group_availability_topic_map = {}
@@ -349,27 +350,35 @@ class MqttLightControl():
             self.set_switch_state(s, state)
             self.mqtt_broadcast_state(s, broadcast_state)
 
-        group_state_topic = self.group_state_topic_map.get(msg.topic)
-        group_json_state_topic = self.group_json_state_topic_map.get(msg.topic)
-        if broadcast_state and (group_state_topic or group_json_state_topic):
-            avail_topic = self.group_availability_topic_map.get(msg.topic)
+            # Mirror to the z2m-shaped group topics for any state change,
+            # not just commands that arrived on group_command_topic. HA's
+            # all-off / per-entity service calls land on mqtt_command_topic
+            # (the per-relay set); without this mirror, downstream listeners
+            # of group_state_topic see stale state until the next button
+            # press goes through group_command_topic.
+            group_state_topic = s.get('group_state_topic')
+            group_json_state_topic = s.get('group_json_state_topic')
+            if not (group_state_topic or group_json_state_topic):
+                continue
+            avail_topic = self.group_availability_topic_map.get(s.get('group_command_topic'))
             # Defer to z2m only when its group availability is positively "online".
             # Missing/offline/parse-error → publish ourselves.
-            if not (avail_topic and self.z2m_group_online.get(avail_topic, False)):
-                if group_state_topic:
-                    self.mqttclient.publish(
-                        group_state_topic,
-                        payload=broadcast_state.upper(),
-                        qos=0,
-                        retain=False,
-                    )
-                if group_json_state_topic:
-                    self.mqttclient.publish(
-                        group_json_state_topic,
-                        payload=json.dumps({'state': broadcast_state.upper()}),
-                        qos=0,
-                        retain=False,
-                    )
+            if avail_topic and self.z2m_group_online.get(avail_topic, False):
+                continue
+            if group_state_topic:
+                self.mqttclient.publish(
+                    group_state_topic,
+                    payload=broadcast_state.upper(),
+                    qos=0,
+                    retain=False,
+                )
+            if group_json_state_topic:
+                self.mqttclient.publish(
+                    group_json_state_topic,
+                    payload=json.dumps({'state': broadcast_state.upper()}),
+                    qos=0,
+                    retain=False,
+                )
 
     def set_switch_state(self, switch, state):
         if switch['type'] == 'pwm':
