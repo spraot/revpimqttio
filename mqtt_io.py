@@ -12,6 +12,7 @@
 import os
 import sys
 import json
+import threading
 import yaml
 import revpimodio2
 import paho.mqtt.client as mqtt
@@ -134,6 +135,13 @@ class MqttLightControl():
 
         self.availability_topic = self.topic_prefix + '/bridge/state'
         self.homeassistant_status_topic = '{}/status'.format(self.homeassistant_prefix)
+        # Stale-config cleanup (approach A): switches publish under light/ and
+        # (for pwm dimmers) sensor/, so scan those two namespaces.
+        self.discovery_config_wildcards = [
+            '{}/light/+/config'.format(self.homeassistant_prefix),
+            '{}/sensor/+/config'.format(self.homeassistant_prefix),
+        ]
+        self._discovery_scan = None
 
         for switch in self.switches:
             if not 'id' in switch:
@@ -208,6 +216,7 @@ class MqttLightControl():
                 "name": "RevPi "+switch['type'],
                 "sw_version": "mqttio"
             },
+            "origin": {"name": "mqttio"},
             "unique_id": switch["unique_id"]
         }
 
@@ -217,6 +226,35 @@ class MqttLightControl():
         json_conf = json.dumps(switch_configuration)
         logger.debug("Broadcasting homeassistant configuration for switch: " + switch["name"] + ":" + json_conf)
         self.mqttclient.publish(switch["mqtt_config_topic"], payload=json_conf, qos=0, retain=True)
+
+    def _start_discovery_cleanup(self):
+        # Approach A — broker is the source of truth for what discovery configs
+        # exist. Collect retained configs in our namespaces for a short window,
+        # then clear any that are ours (origin.name) but no longer desired.
+        self._discovery_scan = {}
+        for wildcard in self.discovery_config_wildcards:
+            self.mqttclient.subscribe(wildcard)
+        threading.Timer(3.0, self._finish_discovery_cleanup).start()
+
+    def _finish_discovery_cleanup(self):
+        scan, self._discovery_scan = self._discovery_scan, None
+        for wildcard in self.discovery_config_wildcards:
+            self.mqttclient.unsubscribe(wildcard)
+        if not scan:
+            return
+        desired = {switch['mqtt_config_topic'] for switch in self.switches}
+        for topic, payload in scan.items():
+            if topic in desired or not payload:
+                continue
+            try:
+                conf = json.loads(payload)
+            except ValueError:
+                continue
+            # Only ever clear configs we published — never another integration's.
+            if conf.get('origin', {}).get('name') != 'mqttio':
+                continue
+            logger.info("Clearing stale discovery config: " + topic)
+            self.mqttclient.publish(topic, payload='', qos=0, retain=True)
 
     def start(self):
         logger.info("starting")
@@ -272,9 +310,17 @@ class MqttLightControl():
         self.mqttclient.publish(self.availability_topic, payload='{"state": "online"}', qos=0, retain=True)
         self.mqttclient.will_set(self.availability_topic, payload='{"state": "offline"}', qos=0, retain=True)
 
+        # Clear discovery configs left behind by past unique_ids.
+        self._start_discovery_cleanup()
+
     def mqtt_on_message(self, client, userdata, msg):
         payload = msg.payload.decode('utf-8').strip()
         logger.debug("Received MQTT message on topic: " + msg.topic + ", payload: " + payload + ", retained: " + str(msg.retain))
+
+        # During a cleanup scan, collect retained discovery configs.
+        if self._discovery_scan is not None and msg.retain and msg.topic.endswith('/config'):
+            self._discovery_scan[msg.topic] = payload
+            return
 
         # Re-announce discovery when Home Assistant restarts (birth message).
         if msg.topic == self.homeassistant_status_topic:
