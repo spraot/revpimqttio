@@ -133,6 +133,7 @@ class MqttLightControl():
                 pass
 
         self.availability_topic = self.topic_prefix + '/bridge/state'
+        self.homeassistant_status_topic = '{}/status'.format(self.homeassistant_prefix)
 
         for switch in self.switches:
             if not 'id' in switch:
@@ -265,12 +266,23 @@ class MqttLightControl():
         for avail_topic in set(self.group_availability_topic_map.values()):
             self.mqttclient.subscribe(avail_topic)
 
+        #Re-announce discovery when Home Assistant restarts (birth message).
+        self.mqttclient.subscribe(self.homeassistant_status_topic)
+
         self.mqttclient.publish(self.availability_topic, payload='{"state": "online"}', qos=0, retain=True)
         self.mqttclient.will_set(self.availability_topic, payload='{"state": "offline"}', qos=0, retain=True)
 
     def mqtt_on_message(self, client, userdata, msg):
         payload = msg.payload.decode('utf-8').strip()
         logger.debug("Received MQTT message on topic: " + msg.topic + ", payload: " + payload + ", retained: " + str(msg.retain))
+
+        # Re-announce discovery when Home Assistant restarts (birth message).
+        if msg.topic == self.homeassistant_status_topic:
+            if payload == 'online':
+                logger.info("Home Assistant online — re-announcing discovery configs")
+                for switch in self.switches:
+                    self.configure_mqtt_for_switch(switch)
+            return
 
         # Availability tracking branch: z2m publishes group availability at
         # <group_root>/availability as retained JSON {"state":"online"|"offline"}.
