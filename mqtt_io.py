@@ -196,14 +196,21 @@ class MqttLightControl():
 
 
     def configure_mqtt_for_switch(self, switch):
+        component = 'sensor' if switch['type'] == 'pwm' else switch['type']
+
+        # `mqtt_broadcast_state` publishes the state as a BARE payload: lowercase
+        # 'on'/'off' for light and switch, a plain number for pwm -- never JSON.
+        # Only the two availability topics carry JSON ('{"state": "online"}'),
+        # which is why the availability templates below are correct while the
+        # state side must not reach for `value_json`. Declaring
+        # `state_template: "{{ value_json.state }}"` for every component made
+        # Home Assistant log
+        #   Error parsing value: 'value_json' is undefined
+        #   (value: on, template: {{ value_json.state }})
+        # on every single state message.
         switch_configuration = {
             "name": switch["name"],
-            "command_topic": switch["mqtt_command_topic"],
-            "schema": "template",
-            "command_on_template": "on",
-            "command_off_template": "off",
             "state_topic": switch["mqtt_state_topic"],
-            "state_template": "{{ value_json.state }}",
             "availability": [
                 {'topic': self.availability_topic, 'value_template': '{{ value_json.state }}'},
                 {'topic': switch["mqtt_availability_topic"], 'value_template': '{{ value_json.state }}'},
@@ -220,7 +227,34 @@ class MqttLightControl():
             "unique_id": switch["unique_id"]
         }
 
-        if switch['type'] == 'pwm':
+        if component == 'light':
+            # Template schema: `state_template` must render to 'on' or 'off',
+            # which the raw payload already is. HA was recovering from the bad
+            # template by falling back to the raw value, so these entities held
+            # the right state and only the log line was wrong.
+            switch_configuration.update({
+                "command_topic": switch["mqtt_command_topic"],
+                "schema": "template",
+                "command_on_template": "on",
+                "command_off_template": "off",
+                "state_template": "{{ value }}",
+            })
+        elif component == 'switch':
+            # MQTT switch has no template schema and ignores `state_template`
+            # outright: it matches the payload against state_on/state_off, which
+            # default to the UPPERCASE 'ON'/'OFF'. Against a lowercase payload
+            # and with no override, the entity resolved no state at all and sat
+            # 'unknown' indefinitely -- the one component this bug actually broke.
+            switch_configuration.update({
+                "command_topic": switch["mqtt_command_topic"],
+                "payload_on": "on",
+                "payload_off": "off",
+                "state_on": "on",
+                "state_off": "off",
+            })
+        else:
+            # pwm -> sensor. Sensors take the payload as-is and have no command
+            # topic; the previous config sent one, which HA ignored.
             switch_configuration['unit_of_measurement'] = '%'
 
         json_conf = json.dumps(switch_configuration)
