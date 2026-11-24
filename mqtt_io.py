@@ -402,7 +402,14 @@ class MqttLightControl():
             payload_state = payload.lower()
 
         if payload_brightness is None and payload_state is None:
-            logger.error(f'Could not find state or brightness in payload: {payload}')
+            # A z2m group's /set topic also carries commands that have nothing
+            # to do with the relay (brightness_move, color_temp, effect, ...).
+            # Those are addressed to the bulbs, not to us, so they are not an
+            # error. On our own command topics it is still a caller mistake.
+            if any(s.get('group_command_topic') == msg.topic for s in switch_group):
+                logger.debug(f'Ignoring group command without state or brightness: {payload}')
+            else:
+                logger.error(f'Could not find state or brightness in payload: {payload}')
             return
 
         broadcast_state = None
